@@ -243,7 +243,7 @@ class Mark2(MycroftSkill):
         try:
             subprocess.call(['/usr/sbin/i2cset',
                              '-y',                 # force a write
-                             '3',                  # i2c bus number
+                             '1',                  # i2c bus number
                              '0x4b',               # stereo amp device address
                              str(int(63 * pct))])  # volume level, 0-63
         except Exception as e:
@@ -253,7 +253,7 @@ class Mark2(MycroftSkill):
         # Get the volume from hardware
         try:
             vol = subprocess.check_output(['/usr/sbin/i2cget', '-y',
-                                           '3', '0x4b'])
+                                           '1', '0x4b'])
             # Convert the returned hex value from i2cget
             i = int(vol, 16)
             i = 0 if i < 0 else i
