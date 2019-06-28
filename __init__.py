@@ -245,7 +245,7 @@ class Mark2(MycroftSkill):
                              '-y',                 # force a write
                              '1',                  # i2c bus number
                              '0x4b',               # stereo amp device address
-                             str(int(63 * pct))])  # volume level, 0-63
+                             str(int(15 * pct) + 15)])  # volume level, 0-63
         except Exception as e:
             self.log.error('Couldn\'t set volume. ({})'.format(e))
 
