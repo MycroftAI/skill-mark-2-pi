@@ -25,6 +25,48 @@ from mycroft.util.log import LOG
 from mycroft.util.parse import normalize
 from mycroft import intent_file_handler
 
+from PIL import Image, ImageDraw, ImageFont
+import struct
+
+# Basic drawing to the framebuffer
+BACKGROUND = (0, 0, 0)
+FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+
+
+def fit_font(text, font_path, font_size):
+    """ Brute force a good fontsize to make text fit screen. """
+    font = ImageFont.truetype(font_path, font_size)
+    w, h = font.getsize(text)
+    while w < 0.9 * 400:
+        # iterate until the text size is just larger than the criteria
+        font_size += 1
+        font = ImageFont.truetype(font_path, font_size)
+        w, h = font.getsize(text)
+
+    return font
+
+
+def write_fb(im, dev=None):
+    """ Write Image Object to framebuffer.
+
+        TODO: Check memory mapping
+    """
+    dev = dev or '/dev/fb0'
+    start_time = time.time()
+    cols = []
+    for j in range(im.size[1] - 1):
+        for i in range(im.size[0]):
+            R, G, B, A = im.getpixel((i, j))
+            # Write color data in the correct order for the screen
+            cols.append(struct.pack('BBBB', R, G, B, A))
+    LOG.info('Row time: {}'.format(time.time() - start_time))
+    with open(dev, 'wb') as f:
+        f.write(struct.pack('BBBB', 0, 0, 0, 0) * ((800 - im.size[1]) // 2  * 400))
+        f.write(b''.join(cols))
+        f.write(struct.pack('BBBB', 0, 0, 0, 0) * ((800 - im.size[1]) // 2  * 400))
+
+    LOG.info('Draw time: {}'.format(time.time() - start_time))
+
 
 class Mark2(MycroftSkill):
     """
@@ -76,6 +118,7 @@ class Mark2(MycroftSkill):
             # System events
             self.add_event('system.reboot', self.handle_system_reboot)
             self.add_event('system.shutdown', self.handle_system_shutdown)
+            self.add_event('enclosure.mouth.text', self.handle_show_text)
 
             # Handle volume setting via I2C
             self.add_event('mycroft.volume.set', self.on_volume_set)
@@ -102,6 +145,19 @@ class Mark2(MycroftSkill):
     def handle_system_shutdown(self, message):
         subprocess.call(['/usr/bin/systemctl', 'poweroff'])
 
+    def handle_show_text(self, message):
+        self.log.debug("Drawing text to framebuffer")
+        text = message.data.get('text')
+        if text:
+            text = text.strip()
+            font = fit_font(text, FONT_PATH, 30)
+            w, h = font.getsize(text)
+            image = Image.new('RGBA', (400, h), BACKGROUND)
+            draw = ImageDraw.Draw(image)
+            # Draw to center of screen
+            draw.text(((400 - w) / 2, 0), text,
+                      fill='white', font=font)
+            write_fb(image)
     ###################################################################
     # System volume
 
