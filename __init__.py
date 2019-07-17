@@ -98,6 +98,16 @@ VOL_SMAX = VOL_MAX - VOL_OFFSET
 VOL_ZERO = 0
 
 
+def clip(val, minimum, maximum):
+    """ Clips / limits a value to a specific range.
+
+        Arguments:
+            val: value to be limited
+            minimum: minimum allowed value
+            maximum: maximum allowed value
+    """
+    return min(max(val, minimum), maximum)
+
 class Mark2(MycroftSkill):
     """
         The Mark2 skill handles much of the screen and audio activities
@@ -266,15 +276,17 @@ class Mark2(MycroftSkill):
             self.log.error('Couldn\'t set volume. ({})'.format(e))
 
     def get_hardware_volume(self):
-        # Get the volume from hardware
+        """ Get the volume from hardware
+
+            Returns: (float) 0.0 - 1.0 "percentage"
+        """
         try:
             vol = subprocess.check_output(['/usr/sbin/i2cget', '-y',
                                            '1', '0x4b'])
             # Convert the returned hex value from i2cget
-            i = int(vol, 16)
-            i = 0 if i < 0 else i
-            i = 63 if i > 63 else i
-            self.volume = i / 63.0
+            hw_vol = int(vol, 16)
+            hw_vol = clip(hw_vol, 0, 63)
+            self.volume = clip((hw_vol - VOL_OFFSET) / VOL_SMAX, 0.0, 1.0)
         except subprocess.CalledProcessError as e:
             self.log.info('I2C Communication error:  {}'.format(repr(e)))
         except FileNotFoundError:
