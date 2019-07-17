@@ -91,6 +91,13 @@ def draw_file(file_path, dev='/dev/fb0'):
             fb.write(img.read())
 
 
+# Definitions used when sending volume over i2c
+VOL_MAX = 30
+VOL_OFFSET = 15
+VOL_SMAX = VOL_MAX - VOL_OFFSET
+VOL_ZERO = 0
+
+
 class Mark2(MycroftSkill):
     """
         The Mark2 skill handles much of the screen and audio activities
@@ -240,16 +247,21 @@ class Mark2(MycroftSkill):
     def set_hardware_volume(self, pct):
         """ Set the volume on hardware (which supports levels 0-63).
 
+            Since the amplifier is quite powerful the range is limited to
+            0 - 30.
+
             Arguments:
-                pct (int): audio volume (0.0 - 1.0).
+                pct (float): audio volume (0.0 - 1.0).
         """
-        self.log.debug('Setting hardware volume to: {}'.format(pct))
+        vol = int(VOL_SMAX * pct + VOL_OFFSET) if pct >= 0.01 else VOL_ZERO
+        self.log.debug('Setting hardware volume to: {} ({})'.format(pct, vol))
+
         try:
             subprocess.call(['/usr/sbin/i2cset',
                              '-y',                 # force a write
                              '1',                  # i2c bus number
                              '0x4b',               # stereo amp device address
-                             str(int(15 * pct) + 15)])  # volume level, 0-63
+                             str(vol)])  # volume level, 0-30
         except Exception as e:
             self.log.error('Couldn\'t set volume. ({})'.format(e))
 
