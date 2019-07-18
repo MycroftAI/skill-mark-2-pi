@@ -231,8 +231,8 @@ class Mark2(MycroftSkill):
     def on_volume_set(self, message):
         """ Force vol between 0.0 and 1.0. """
         vol = message.data.get("percent", 0.5)
-        vol = 0.0 if vol < 0.0 else vol
-        vol = 1.0 if vol > 1.0 else vol
+        vol = clip(vol, 0.0, 1.0)
+
         self.volume = vol
         self.muted = False
         self.set_hardware_volume(vol)
@@ -265,13 +265,12 @@ class Mark2(MycroftSkill):
         """
         vol = int(VOL_SMAX * pct + VOL_OFFSET) if pct >= 0.01 else VOL_ZERO
         self.log.debug('Setting hardware volume to: {} ({})'.format(pct, vol))
-
         try:
             subprocess.call(['/usr/sbin/i2cset',
-                             '-y',                 # force a write
-                             '1',                  # i2c bus number
-                             '0x4b',               # stereo amp device address
-                             str(vol)])  # volume level, 0-30
+                             '-y',                # force a write
+                             '1',                 # i2c bus number
+                             '0x4b',              # stereo amp device address
+                             str(vol)])           # volume level, 0-30
         except Exception as e:
             self.log.error('Couldn\'t set volume. ({})'.format(e))
 
