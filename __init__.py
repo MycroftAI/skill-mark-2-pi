@@ -68,6 +68,18 @@ def write_fb(im, dev=None):
     LOG.info('Draw time: {}'.format(time.time() - start_time))
 
 
+def draw_file(file_path, dev=None):
+    """ Writes a file directly to the framebuff device.
+    Arguments:
+        file_path (str): path to file to be drawn to frame buffer device
+        dev (str): Optional framebuffer device to write to
+    """
+    dev = dev or '/dev/fb0'
+    with open(file_path, 'rb') as img:
+        with open(dev, 'wb') as fb:
+            fb.write(img.read())
+
+
 class Mark2(MycroftSkill):
     """
         The Mark2 skill handles much of the screen and audio activities
@@ -158,6 +170,9 @@ class Mark2(MycroftSkill):
             draw.text(((400 - w) / 2, 0), text,
                       fill='white', font=font)
             write_fb(image)
+            time.sleep(30)
+            draw_file(self.find_resource('mycroft.fb', 'ui'))
+
     ###################################################################
     # System volume
 
@@ -224,7 +239,7 @@ class Mark2(MycroftSkill):
             Sets switches from resting "face" to a registered resting screen.
         """
         time.sleep(1)
-        self.collect_resting_screens()
+        draw_file(self.find_resource('mycroft.fb', 'ui'))
 
     def shutdown(self):
         # Gotta clean up manually since not using add_event()
