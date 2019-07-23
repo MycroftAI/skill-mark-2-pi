@@ -29,8 +29,8 @@ from PIL import Image, ImageDraw, ImageFont
 import struct
 
 # Basic drawing to the framebuffer
-BACKGROUND = (0, 0, 0)
-FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+BACKGROUND = (34, 167, 240)
+FONT_PATH = 'NotoSansDisplay-Bold.ttf'
 
 
 def fit_font(text, font_path, font_size):
@@ -58,12 +58,13 @@ def write_fb(im, dev=None):
         for i in range(im.size[0]):
             R, G, B, A = im.getpixel((i, j))
             # Write color data in the correct order for the screen
-            cols.append(struct.pack('BBBB', R, G, B, A))
+            cols.append(struct.pack('BBBB', B, G, R, A))
     LOG.info('Row time: {}'.format(time.time() - start_time))
     with open(dev, 'wb') as f:
-        f.write(struct.pack('BBBB', 0, 0, 0, 0) * ((800 - im.size[1]) // 2  * 400))
+        color = [BACKGROUND[2], BACKGROUND[1], BACKGROUND[0], 0]
+        f.write(struct.pack('BBBB', *color) * ((800 - im.size[1]) // 2  * 400))
         f.write(b''.join(cols))
-        f.write(struct.pack('BBBB', 0, 0, 0, 0) * ((800 - im.size[1]) // 2  * 400))
+        f.write(struct.pack('BBBB', *color) * ((800 - im.size[1]) // 2  * 400))
 
     LOG.info('Draw time: {}'.format(time.time() - start_time))
 
@@ -162,7 +163,7 @@ class Mark2(MycroftSkill):
         text = message.data.get('text')
         if text:
             text = text.strip()
-            font = fit_font(text, FONT_PATH, 30)
+            font = fit_font(text, self.find_resource(FONT_PATH, 'ui'), 30)
             w, h = font.getsize(text)
             image = Image.new('RGBA', (400, h), BACKGROUND)
             draw = ImageDraw.Draw(image)
