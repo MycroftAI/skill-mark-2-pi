@@ -19,6 +19,7 @@ import subprocess
 from pytz import timezone
 from datetime import datetime
 from collections import namedtuple
+
 from mycroft.messagebus.message import Message
 from mycroft.skills.core import MycroftSkill
 from mycroft.util.log import LOG
@@ -102,6 +103,11 @@ class Mark2(MycroftSkill):
         self.muted = False
         self.get_hardware_volume()       # read from the device
 
+        # Screen handling
+        self.loading = True
+        self.showing = False
+        self.last_text = time.monotonic()
+
     def initialize(self):
         """ Perform initalization.
 
@@ -164,7 +170,11 @@ class Mark2(MycroftSkill):
         subprocess.call(['/usr/bin/systemctl', 'poweroff'])
 
     def handle_show_text(self, message):
+        draw_time = time.monotonic()
+        self.last_text = draw_time
+
         self.log.debug("Drawing text to framebuffer")
+        self.showing = True
         text = message.data.get('text')
         if text:
             text = text.strip()
@@ -177,7 +187,11 @@ class Mark2(MycroftSkill):
                       fill='white', font=font)
             write_fb(image)
             time.sleep(30)
-            draw_file(self.find_resource('mycroft.fb', 'ui'))
+            # Make sure no never text has been drawn during our sleep
+            if self.last_text == draw_time:
+                rest_screen = 'loading.fb' if self.loading else 'mycroft.fb'
+                draw_file(self.find_resource(rest_screen, 'ui'))
+        self.showing = False
 
     ###################################################################
     # System volume
@@ -240,11 +254,10 @@ class Mark2(MycroftSkill):
             self.log.info('UNEXPECTED VOLUME RESULT:  {}'.format(vol))
 
     def reset_face(self, message):
-        """ Triggered after skills are initialized.
-
-            Sets switches from resting "face" to a registered resting screen.
-        """
-        draw_file(self.find_resource('mycroft.fb', 'ui'))
+        """Triggered after skills are initialized."""
+        self.loading = False
+        if not self.showing:
+            draw_file(self.find_resource('mycroft.fb', 'ui'))
 
     def shutdown(self):
         # Gotta clean up manually since not using add_event()
