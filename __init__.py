@@ -18,7 +18,7 @@ import arrow
 import subprocess
 from pytz import timezone
 from datetime import datetime
-
+from collections import namedtuple
 from mycroft.messagebus.message import Message
 from mycroft.skills.core import MycroftSkill
 from mycroft.util.log import LOG
@@ -29,7 +29,12 @@ from PIL import Image, ImageDraw, ImageFont
 import struct
 
 # Basic drawing to the framebuffer
-BACKGROUND = (34, 167, 240)
+Color = namedtuple('Color', ['red', 'green', 'blue'])
+Screen = namedtuple('Screen', ['height', 'width'])
+
+SCREEN = Screen(800, 400)
+BACKGROUND = Color(34, 167, 240)
+
 FONT_PATH = 'NotoSansDisplay-Bold.ttf'
 
 
@@ -46,12 +51,11 @@ def fit_font(text, font_path, font_size):
     return font
 
 
-def write_fb(im, dev=None):
+def write_fb(im, dev='/dev/fb0'):
     """ Write Image Object to framebuffer.
 
         TODO: Check memory mapping
     """
-    dev = dev or '/dev/fb0'
     start_time = time.time()
     cols = []
     for j in range(im.size[1] - 1):
@@ -61,21 +65,22 @@ def write_fb(im, dev=None):
             cols.append(struct.pack('BBBB', B, G, R, A))
     LOG.info('Row time: {}'.format(time.time() - start_time))
     with open(dev, 'wb') as f:
-        color = [BACKGROUND[2], BACKGROUND[1], BACKGROUND[0], 0]
-        f.write(struct.pack('BBBB', *color) * ((800 - im.size[1]) // 2  * 400))
+        color = [BACKGROUND.blue, BACKGROUND.green, BACKGROUND.red, 0]
+        f.write(struct.pack('BBBB', *color) *
+                ((SCREEN.height - im.size[1]) // 2  * SCREEN.width))
         f.write(b''.join(cols))
-        f.write(struct.pack('BBBB', *color) * ((800 - im.size[1]) // 2  * 400))
+        f.write(struct.pack('BBBB', *color) *
+                ((SCREEN.height - im.size[1]) // 2  * SCREEN.width))
 
-    LOG.info('Draw time: {}'.format(time.time() - start_time))
+    LOG.debug('Draw time: {}'.format(time.time() - start_time))
 
 
-def draw_file(file_path, dev=None):
+def draw_file(file_path, dev='/dev/fb0'):
     """ Writes a file directly to the framebuff device.
     Arguments:
         file_path (str): path to file to be drawn to frame buffer device
         dev (str): Optional framebuffer device to write to
     """
-    dev = dev or '/dev/fb0'
     with open(file_path, 'rb') as img:
         with open(dev, 'wb') as fb:
             fb.write(img.read())
@@ -239,7 +244,6 @@ class Mark2(MycroftSkill):
 
             Sets switches from resting "face" to a registered resting screen.
         """
-        time.sleep(1)
         draw_file(self.find_resource('mycroft.fb', 'ui'))
 
     def shutdown(self):
