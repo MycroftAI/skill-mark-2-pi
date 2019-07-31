@@ -18,12 +18,73 @@ import arrow
 import subprocess
 from pytz import timezone
 from datetime import datetime
+from collections import namedtuple
 
 from mycroft.messagebus.message import Message
 from mycroft.skills.core import MycroftSkill
 from mycroft.util.log import LOG
 from mycroft.util.parse import normalize
 from mycroft import intent_file_handler
+
+from PIL import Image, ImageDraw, ImageFont
+import struct
+
+# Basic drawing to the framebuffer
+Color = namedtuple('Color', ['red', 'green', 'blue'])
+Screen = namedtuple('Screen', ['height', 'width'])
+
+SCREEN = Screen(800, 400)
+BACKGROUND = Color(34, 167, 240)
+
+FONT_PATH = 'NotoSansDisplay-Bold.ttf'
+
+
+def fit_font(text, font_path, font_size):
+    """ Brute force a good fontsize to make text fit screen. """
+    font = ImageFont.truetype(font_path, font_size)
+    w, h = font.getsize(text)
+    while w < 0.9 * 400:
+        # iterate until the text size is just larger than the criteria
+        font_size += 1
+        font = ImageFont.truetype(font_path, font_size)
+        w, h = font.getsize(text)
+
+    return font
+
+
+def write_fb(im, dev='/dev/fb0'):
+    """ Write Image Object to framebuffer.
+
+        TODO: Check memory mapping
+    """
+    start_time = time.time()
+    cols = []
+    for j in range(im.size[1] - 1):
+        for i in range(im.size[0]):
+            R, G, B, A = im.getpixel((i, j))
+            # Write color data in the correct order for the screen
+            cols.append(struct.pack('BBBB', B, G, R, A))
+    LOG.info('Row time: {}'.format(time.time() - start_time))
+    with open(dev, 'wb') as f:
+        color = [BACKGROUND.blue, BACKGROUND.green, BACKGROUND.red, 0]
+        f.write(struct.pack('BBBB', *color) *
+                ((SCREEN.height - im.size[1]) // 2  * SCREEN.width))
+        f.write(b''.join(cols))
+        f.write(struct.pack('BBBB', *color) *
+                ((SCREEN.height - im.size[1]) // 2  * SCREEN.width))
+
+    LOG.debug('Draw time: {}'.format(time.time() - start_time))
+
+
+def draw_file(file_path, dev='/dev/fb0'):
+    """ Writes a file directly to the framebuff device.
+    Arguments:
+        file_path (str): path to file to be drawn to frame buffer device
+        dev (str): Optional framebuffer device to write to
+    """
+    with open(file_path, 'rb') as img:
+        with open(dev, 'wb') as fb:
+            fb.write(img.read())
 
 
 class Mark2(MycroftSkill):
@@ -41,6 +102,11 @@ class Mark2(MycroftSkill):
         self.volume = 0.5
         self.muted = False
         self.get_hardware_volume()       # read from the device
+
+        # Screen handling
+        self.loading = True
+        self.showing = False
+        self.last_text = time.monotonic()
 
     def initialize(self):
         """ Perform initalization.
@@ -76,6 +142,7 @@ class Mark2(MycroftSkill):
             # System events
             self.add_event('system.reboot', self.handle_system_reboot)
             self.add_event('system.shutdown', self.handle_system_shutdown)
+            self.add_event('enclosure.mouth.text', self.handle_show_text)
 
             # Handle volume setting via I2C
             self.add_event('mycroft.volume.set', self.on_volume_set)
@@ -101,6 +168,30 @@ class Mark2(MycroftSkill):
 
     def handle_system_shutdown(self, message):
         subprocess.call(['/usr/bin/systemctl', 'poweroff'])
+
+    def handle_show_text(self, message):
+        draw_time = time.monotonic()
+        self.last_text = draw_time
+
+        self.log.debug("Drawing text to framebuffer")
+        self.showing = True
+        text = message.data.get('text')
+        if text:
+            text = text.strip()
+            font = fit_font(text, self.find_resource(FONT_PATH, 'ui'), 30)
+            w, h = font.getsize(text)
+            image = Image.new('RGBA', (400, h), BACKGROUND)
+            draw = ImageDraw.Draw(image)
+            # Draw to center of screen
+            draw.text(((400 - w) / 2, 0), text,
+                      fill='white', font=font)
+            write_fb(image)
+            time.sleep(30)
+            # Make sure no never text has been drawn during our sleep
+            if self.last_text == draw_time:
+                rest_screen = 'loading.fb' if self.loading else 'mycroft.fb'
+                draw_file(self.find_resource(rest_screen, 'ui'))
+        self.showing = False
 
     ###################################################################
     # System volume
@@ -163,12 +254,10 @@ class Mark2(MycroftSkill):
             self.log.info('UNEXPECTED VOLUME RESULT:  {}'.format(vol))
 
     def reset_face(self, message):
-        """ Triggered after skills are initialized.
-
-            Sets switches from resting "face" to a registered resting screen.
-        """
-        time.sleep(1)
-        self.collect_resting_screens()
+        """Triggered after skills are initialized."""
+        self.loading = False
+        if not self.showing:
+            draw_file(self.find_resource('mycroft.fb', 'ui'))
 
     def shutdown(self):
         # Gotta clean up manually since not using add_event()
