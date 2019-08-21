@@ -139,7 +139,7 @@ class Mark2(MycroftSkill):
             self.bus.on('recognizer_loop:audio_output_end',
                         self.on_handler_mouth_reset)
 
-            self.bus.on('mycroft.skills.initialized', self.reset_face)
+            self.bus.on('mycroft.ready', self.reset_face)
 
             # System events
             self.add_event('system.reboot', self.handle_system_reboot)
