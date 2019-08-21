@@ -21,6 +21,7 @@ from datetime import datetime
 from collections import namedtuple
 from os.path import join
 
+from mycroft.api import is_paired
 from mycroft.messagebus.message import Message
 from mycroft.skills.core import MycroftSkill
 from mycroft.util.log import LOG
@@ -258,7 +259,8 @@ class Mark2(MycroftSkill):
     def reset_face(self, message):
         """Triggered after skills are initialized."""
         self.loading = False
-        play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
+        if is_paired():
+            play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
         if not self.showing:
             draw_file(self.find_resource('mycroft.fb', 'ui'))
 
