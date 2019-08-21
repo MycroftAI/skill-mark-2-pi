@@ -19,11 +19,13 @@ import subprocess
 from pytz import timezone
 from datetime import datetime
 from collections import namedtuple
+from os.path import join
 
 from mycroft.messagebus.message import Message
 from mycroft.skills.core import MycroftSkill
 from mycroft.util.log import LOG
 from mycroft.util.parse import normalize
+from mycroft.util import play_wav
 from mycroft import intent_file_handler
 
 from PIL import Image, ImageDraw, ImageFont
@@ -256,6 +258,7 @@ class Mark2(MycroftSkill):
     def reset_face(self, message):
         """Triggered after skills are initialized."""
         self.loading = False
+        play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
         if not self.showing:
             draw_file(self.find_resource('mycroft.fb', 'ui'))
 
