@@ -99,7 +99,7 @@ class Mark2(MycroftSkill):
         super().__init__('Mark2')
 
         self.settings['auto_brightness'] = False
-        self.settings['use_listening_beep'] = True
+        self.settings['use_listening_beep'] = False
 
         # System volume
         self.volume = 0.5
