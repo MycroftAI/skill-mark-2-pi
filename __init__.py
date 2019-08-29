@@ -115,6 +115,11 @@ class Mark2(MycroftSkill):
 
         # LEDs
         pixel_ring.set_vad_led(False)  # No red center LED speech indication
+        self.main_blue = 0x22A7F0
+        self.tertiary_blue = 0x4DE0FF
+        self.tertiary_green = 0x40DBB0
+        self.num_leds = 12
+        self.show_volume = False
         self.speaking = False
 
     def initialize(self):
@@ -215,11 +220,13 @@ class Mark2(MycroftSkill):
         self.volume = vol
         self.muted = False
         self.set_hardware_volume(vol)
+        self.show_volume = True
 
     def on_volume_get(self, message):
         """ Handle request for current volume. """
         self.bus.emit(message.response(data={'percent': self.volume,
                                              'muted': self.muted}))
+        self.show_volume = message.data.get('show', False)
 
     def on_volume_duck(self, message):
         """ Handle ducking event by setting the output to 0. """
@@ -284,12 +291,17 @@ class Mark2(MycroftSkill):
                         self.on_handler_audio_end)
 
     def on_handler_audio_start(self, message):
-        """Light up LED when speaking"""
-        self.speaking = True
-        pixel_ring.speak()
+        """Light up LED when speaking, show volume if requested"""
+        if self.show_volume:
+            pixel_ring.set_volume(int(self.volume * self.num_leds))
+        else:
+            self.speaking = True
+            pixel_ring.set_color_palette(self.main_blue, self.tertiary_blue)
+            pixel_ring.speak()
 
     def on_handler_audio_end(self, message):
         self.speaking = False
+        self.showing_volume = False
         pixel_ring.off()
 
     def on_handler_started(self, message):
@@ -297,6 +309,7 @@ class Mark2(MycroftSkill):
         handler = message.data.get('handler', '')
         if self._skip_handler(handler):
             return
+        pixel_ring.set_color_palette(self.main_blue, self.tertiary_green)
         pixel_ring.think()
 
     def on_handler_complete(self, message):
@@ -307,7 +320,7 @@ class Mark2(MycroftSkill):
 
         # If speaking has already begun, on_handler_audio_end will
         # turn off the LEDs
-        if not self.speaking:
+        if not self.speaking and not self.show_volume:
             pixel_ring.off()
 
     def _skip_handler(self, handler):
@@ -317,6 +330,7 @@ class Mark2(MycroftSkill):
 
     def handle_listener_started(self, message):
         """Light up LED when listening"""
+        pixel_ring.set_color_palette(self.main_blue, self.main_blue)
         pixel_ring.listen()
 
     def handle_listener_ended(self, message):
