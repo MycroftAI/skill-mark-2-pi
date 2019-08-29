@@ -30,6 +30,7 @@ from mycroft.util import play_wav
 from mycroft import intent_file_handler
 
 from PIL import Image, ImageDraw, ImageFont
+from pixel_ring import pixel_ring
 import struct
 
 # Basic drawing to the framebuffer
@@ -134,6 +135,8 @@ class Mark2(MycroftSkill):
             # Handle the 'busy' visual
             self.bus.on('mycroft.skill.handler.start',
                         self.on_handler_started)
+            self.bus.on('mycroft.skill.handler.complete',
+                        self.on_handler_complete)
 
             self.bus.on('enclosure.mouth.reset',
                         self.on_handler_mouth_reset)
@@ -273,39 +276,40 @@ class Mark2(MycroftSkill):
         self.bus.remove('recognizer_loop:audio_output_end',
                         self.on_handler_mouth_reset)
 
-    def on_handler_started(self, message):
-        handler = message.data.get("handler", "")
-        # Ignoring handlers from this skill and from the background clock
-        if 'Mark2' in handler:
-            return
-        if 'TimeSkill.update_display' in handler:
-            return
-
     def on_handler_mouth_reset(self, message):
-        """ Restore viseme to a smile. """
+        """Restore viseme to a smile."""
         pass
+
+    def on_handler_started(self, message):
+        """When a skill begins executing turn on the LED ring"""
+        handler = message.data.get('handler', '')
+        if _skip_handler():
+            return
+        pixel_ring.think()
 
     def on_handler_complete(self, message):
-        """ When a skill finishes executing clear the showing page state. """
+        """When a skill finishes executing turn off the LED ring"""
         handler = message.data.get('handler', '')
-        # Ignoring handlers from this skill and from the background clock
-        # TODO: implement Something here
+        if _skip_handler():
+            return
+        pixel_ring.off()
+
+    def _skip_handler(self, handler):
+        """Ignoring handlers from this skill and from the background clock"""
+        skip_list = ('Mark2', 'TimeSkill.update_display')
+        return any(skip in handler for skip in skip_list)
 
     def handle_listener_started(self, message):
-        """ Shows listener page after wakeword is triggered.
-
-            Starts countdown to show the idle page.
-        """
-        # TODO: implement Something here
-        pass
+        """Light up LED when listening"""
+        pixel_ring.listen()
 
     def handle_listener_ended(self, message):
-        """ When listening has ended show the thinking animation. """
-        pass
+        pixel_ring.off()
 
     def handle_failed_stt(self, message):
         """ No discernable words were transcribed. Show idle screen again. """
         pass
+
 
     #####################################################################
     # Manage network connction feedback
@@ -520,3 +524,4 @@ class Mark2(MycroftSkill):
 
 def create_skill():
     return Mark2()
+
