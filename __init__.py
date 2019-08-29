@@ -112,6 +112,9 @@ class Mark2(MycroftSkill):
         self.showing = False
         self.last_text = time.monotonic()
         self.skip_list = ('Mark2', 'TimeSkill.update_display')
+
+        # LEDs
+        pixel_ring.set_vad_led(False)  # No red center LED speech indication
         self.speaking = False
 
     def initialize(self):
