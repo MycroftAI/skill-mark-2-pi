@@ -112,6 +112,7 @@ class Mark2(MycroftSkill):
         self.showing = False
         self.last_text = time.monotonic()
         self.skip_list = ('Mark2', 'TimeSkill.update_display')
+        self.speaking = False
 
     def initialize(self):
         """ Perform initalization.
@@ -139,10 +140,10 @@ class Mark2(MycroftSkill):
             self.bus.on('mycroft.skill.handler.complete',
                         self.on_handler_complete)
 
-            self.bus.on('enclosure.mouth.reset',
-                        self.on_handler_mouth_reset)
+            self.bus.on('recognizer_loop:audio_output_start',
+                        self.on_handler_audio_start)
             self.bus.on('recognizer_loop:audio_output_end',
-                        self.on_handler_mouth_reset)
+                        self.on_handler_audio_end)
 
             self.bus.on('mycroft.ready', self.reset_face)
 
@@ -272,14 +273,21 @@ class Mark2(MycroftSkill):
         # Gotta clean up manually since not using add_event()
         self.bus.remove('mycroft.skill.handler.start',
                         self.on_handler_started)
-        self.bus.remove('enclosure.mouth.reset',
-                        self.on_handler_mouth_reset)
+        self.bus.remove('mycroft.skill.handler.complete',
+                        self.on_handler_complete)
+        self.bus.remove('recognizer_loop:audio_output_start',
+                        self.on_handler_audio_start)
         self.bus.remove('recognizer_loop:audio_output_end',
-                        self.on_handler_mouth_reset)
+                        self.on_handler_audio_end)
 
-    def on_handler_mouth_reset(self, message):
-        """Restore viseme to a smile."""
-        pass
+    def on_handler_audio_start(self, message):
+        """Light up LED when speaking"""
+        self.speaking = True
+        pixel_ring.speak()
+
+    def on_handler_audio_end(self, message):
+        self.speaking = False
+        pixel_ring.off()
 
     def on_handler_started(self, message):
         """When a skill begins executing turn on the LED ring"""
@@ -293,7 +301,11 @@ class Mark2(MycroftSkill):
         handler = message.data.get('handler', '')
         if self._skip_handler(handler):
             return
-        pixel_ring.off()
+
+        # If speaking has already begun, on_handler_audio_end will
+        # turn off the LEDs
+        if not self.speaking:
+            pixel_ring.off()
 
     def _skip_handler(self, handler):
         """Ignoring handlers from this skill and from the background clock"""
