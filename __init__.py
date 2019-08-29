@@ -111,6 +111,7 @@ class Mark2(MycroftSkill):
         self.loading = True
         self.showing = False
         self.last_text = time.monotonic()
+        self.skip_list = ('Mark2', 'TimeSkill.update_display')
 
     def initialize(self):
         """ Perform initalization.
@@ -283,21 +284,21 @@ class Mark2(MycroftSkill):
     def on_handler_started(self, message):
         """When a skill begins executing turn on the LED ring"""
         handler = message.data.get('handler', '')
-        if _skip_handler():
+        if self._skip_handler(handler):
             return
         pixel_ring.think()
 
     def on_handler_complete(self, message):
         """When a skill finishes executing turn off the LED ring"""
         handler = message.data.get('handler', '')
-        if _skip_handler():
+        if self._skip_handler(handler):
             return
         pixel_ring.off()
 
     def _skip_handler(self, handler):
         """Ignoring handlers from this skill and from the background clock"""
-        skip_list = ('Mark2', 'TimeSkill.update_display')
-        return any(skip in handler for skip in skip_list)
+        return any(skip in handler for skip in self.skip_list)
+
 
     def handle_listener_started(self, message):
         """Light up LED when listening"""
