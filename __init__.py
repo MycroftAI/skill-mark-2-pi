@@ -148,6 +148,7 @@ class Mark2(MycroftSkill):
             self.bus.on('mycroft.skill.handler.complete',
                         self.on_handler_complete)
 
+            # Handle the 'speaking' visual
             self.bus.on('recognizer_loop:audio_output_start',
                         self.on_handler_audio_start)
             self.bus.on('recognizer_loop:audio_output_end',
