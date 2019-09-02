@@ -37,7 +37,7 @@ import struct
 Color = namedtuple('Color', ['red', 'green', 'blue'])
 Screen = namedtuple('Screen', ['height', 'width'])
 
-SCREEN = Screen(800, 400)
+SCREEN = Screen(800, 480)
 BACKGROUND = Color(34, 167, 240)
 
 FONT_PATH = 'NotoSansDisplay-Bold.ttf'
@@ -47,7 +47,7 @@ def fit_font(text, font_path, font_size):
     """ Brute force a good fontsize to make text fit screen. """
     font = ImageFont.truetype(font_path, font_size)
     w, h = font.getsize(text)
-    while w < 0.9 * 400:
+    while w < 0.9 * SCREEN.width:
         # iterate until the text size is just larger than the criteria
         font_size += 1
         font = ImageFont.truetype(font_path, font_size)
@@ -196,10 +196,10 @@ class Mark2(MycroftSkill):
             text = text.strip()
             font = fit_font(text, self.find_resource(FONT_PATH, 'ui'), 30)
             w, h = font.getsize(text)
-            image = Image.new('RGBA', (400, h), BACKGROUND)
+            image = Image.new('RGBA', (SCREEN.width, h), BACKGROUND)
             draw = ImageDraw.Draw(image)
             # Draw to center of screen
-            draw.text(((400 - w) / 2, 0), text,
+            draw.text(((SCREEN.width - w) / 2, 0), text,
                       fill='white', font=font)
             write_fb(image)
             time.sleep(30)
