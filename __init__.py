@@ -131,6 +131,18 @@ class Mark2(MycroftSkill):
 
 
         try:
+            # Handle Wi-Fi Setup visuals
+            self.add_event('system.wifi.ap_up',
+                            self.handle_ap_up)
+            self.add_event('system.wifi.ap_device_connected',
+                           self.handle_wifi_device_connected)
+            self.add_event('system.wifi.ap_device_disconnected',
+                            self.handle_ap_up)
+            self.add_event('system.wifi.ap_connection_success',
+                            self.handle_ap_success)
+
+            # Handle Pairing Visuals
+
             self.add_event('mycroft.internet.connected',
                            self.handle_internet_connected)
 
@@ -290,6 +302,16 @@ class Mark2(MycroftSkill):
                         self.on_handler_audio_start)
         self.bus.remove('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
+
+
+    def handle_ap_up(self, message):
+        LOG.info('WAGNER ap up')
+
+    def handle_wifi_device_connected(self, message):
+        LOG.info('WAGNER ap connected')
+
+    def handle_ap_success(self, message):
+        LOG.info('WAGNER ap success')
 
     def on_handler_audio_start(self, message):
         """Light up LED when speaking, show volume if requested"""
