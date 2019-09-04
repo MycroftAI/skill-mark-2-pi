@@ -142,7 +142,8 @@ class Mark2(MycroftSkill):
                             self.handle_ap_success)
 
             # Handle Pairing Visuals
-
+            self.add_event('mycroft.paired',
+                           self.handle_paired)
             self.add_event('mycroft.internet.connected',
                            self.handle_internet_connected)
 
@@ -171,7 +172,6 @@ class Mark2(MycroftSkill):
             # System events
             self.add_event('system.reboot', self.handle_system_reboot)
             self.add_event('system.shutdown', self.handle_system_shutdown)
-            self.add_event('enclosure.mouth.text', self.handle_show_text)
 
             # Handle volume setting via I2C
             self.add_event('mycroft.volume.set', self.on_volume_set)
@@ -199,9 +199,6 @@ class Mark2(MycroftSkill):
         subprocess.call(['/usr/bin/systemctl', 'poweroff'])
 
     def handle_show_text(self, message):
-        draw_time = time.monotonic()
-        self.last_text = draw_time
-
         self.log.debug("Drawing text to framebuffer")
         self.showing = True
         text = message.data.get('text')
@@ -215,11 +212,6 @@ class Mark2(MycroftSkill):
             draw.text(((SCREEN.width - w) / 2, 0), text,
                       fill='white', font=font)
             write_fb(image)
-            time.sleep(30)
-            # Make sure no never text has been drawn during our sleep
-            if self.last_text == draw_time:
-                rest_screen = 'loading.fb' if self.loading else 'mycroft.fb'
-                draw_file(self.find_resource(rest_screen, 'ui'))
         self.showing = False
 
     ###################################################################
@@ -305,15 +297,22 @@ class Mark2(MycroftSkill):
 
     def handle_ap_up(self, message):
         draw_file(self.find_resource('0-wifi-connect.fb', 'ui'))
-        LOG.info('WAGNER ap up')
 
     def handle_wifi_device_connected(self, message):
+        draw_file(self.find_resource('1-wifi-follow-prompt.fb', 'ui'))
+        time.sleep(10)
         draw_file(self.find_resource('2-wifi-choose-network.fb', 'ui'))
-        LOG.info('WAGNER ap connected')
 
     def handle_ap_success(self, message):
         draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
-        LOG.info('WAGNER ap success')
+
+    def handle_paired(self, message):
+        self.bus.remove('enclosure.mouth.text', self.handle_show_text)
+        draw_file(self.find_resource('5-pairing-success.fb', 'ui'))
+        time.sleep(5)
+        draw_file(self.find_resource('6-intro.fb', 'ui'))
+        time.sleep(10)
+        self.reset_face()
 
     def on_handler_audio_start(self, message):
         """Light up LED when speaking, show volume if requested"""
@@ -371,7 +370,16 @@ class Mark2(MycroftSkill):
 
     def handle_internet_connected(self, message):
         """ System came online later after booting. """
-        self.enclosure.mouth_reset()
+        if is_paired():
+            self.enclosure.mouth_reset()
+        else:
+            # If we are not paired the pairing process will begin.
+            # Cannot handle from mycroft.not.paired event because
+            # we trigger first pairing with an utterance.
+            draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
+            time.sleep(5)
+            draw_file(self.find_resource('4-pairing-home.fb', 'ui'))
+            self.bus.on('enclosure.mouth.text', self.handle_show_text)
 
     #####################################################################
     # Web settings
