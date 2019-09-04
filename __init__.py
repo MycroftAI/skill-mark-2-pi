@@ -131,21 +131,20 @@ class Mark2(MycroftSkill):
 
 
         try:
-            # Handle Wi-Fi Setup visuals
+            # Handle Wi-Fi Setup and Pairing Visuals
             self.add_event('system.wifi.ap_up',
                             self.handle_ap_up)
             self.add_event('system.wifi.ap_device_connected',
                            self.handle_wifi_device_connected)
             self.add_event('system.wifi.ap_device_disconnected',
                             self.handle_ap_up)
-            self.add_event('system.wifi.ap_connection_success',
-                            self.handle_ap_success)
-
-            # Handle Pairing Visuals
-            self.add_event('mycroft.paired',
-                           self.handle_paired)
             self.add_event('mycroft.internet.connected',
                            self.handle_internet_connected)
+            self.add_event('mycroft.paired',
+                           self.handle_paired)
+
+            # Handle Device Ready
+            self.bus.on('mycroft.ready', self.reset_face)
 
             # Handle the 'waking' visual
             self.add_event('recognizer_loop:record_begin',
@@ -166,8 +165,6 @@ class Mark2(MycroftSkill):
                         self.on_handler_audio_start)
             self.bus.on('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
-
-            self.bus.on('mycroft.ready', self.reset_face)
 
             # System events
             self.add_event('system.reboot', self.handle_system_reboot)
@@ -300,19 +297,16 @@ class Mark2(MycroftSkill):
 
     def handle_wifi_device_connected(self, message):
         draw_file(self.find_resource('1-wifi-follow-prompt.fb', 'ui'))
-        time.sleep(10)
+        time.sleep(8)
         draw_file(self.find_resource('2-wifi-choose-network.fb', 'ui'))
 
-    def handle_ap_success(self, message):
-        draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
-
     def handle_paired(self, message):
-        self.bus.remove('enclosure.mouth.text', self.handle_show_text)
         draw_file(self.find_resource('5-pairing-success.fb', 'ui'))
         time.sleep(5)
         draw_file(self.find_resource('6-intro.fb', 'ui'))
-        time.sleep(10)
-        self.reset_face()
+        time.sleep(15)
+        self.reset_face(None)
+        self.bus.remove('enclosure.mouth.text', self.handle_show_text)
 
     def on_handler_audio_start(self, message):
         """Light up LED when speaking, show volume if requested"""
