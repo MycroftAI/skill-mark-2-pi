@@ -109,7 +109,6 @@ class Mark2(MycroftSkill):
 
         # Screen handling
         self.loading = True
-        self.showing = False
         self.last_text = time.monotonic()
         self.skip_list = ('Mark2', 'TimeSkill.update_display')
 
@@ -197,7 +196,6 @@ class Mark2(MycroftSkill):
 
     def handle_show_text(self, message):
         self.log.debug("Drawing text to framebuffer")
-        self.showing = True
         text = message.data.get('text')
         if text:
             text = text.strip()
@@ -209,7 +207,6 @@ class Mark2(MycroftSkill):
             draw.text(((SCREEN.width - w) / 2, 0), text,
                       fill='white', font=font)
             write_fb(image)
-        self.showing = False
 
     ###################################################################
     # System volume
@@ -278,7 +275,6 @@ class Mark2(MycroftSkill):
         self.loading = False
         if is_paired():
             play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
-        if not self.showing:
             draw_file(self.find_resource('mycroft.fb', 'ui'))
 
     def shutdown(self):
