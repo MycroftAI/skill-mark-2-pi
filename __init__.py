@@ -303,14 +303,16 @@ class Mark2(MycroftSkill):
         self.bus.remove('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
 
-
     def handle_ap_up(self, message):
+        draw_file(self.find_resource('0-wifi-connect.fb', 'ui'))
         LOG.info('WAGNER ap up')
 
     def handle_wifi_device_connected(self, message):
+        draw_file(self.find_resource('2-wifi-choose-network.fb', 'ui'))
         LOG.info('WAGNER ap connected')
 
     def handle_ap_success(self, message):
+        draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
         LOG.info('WAGNER ap success')
 
     def on_handler_audio_start(self, message):
