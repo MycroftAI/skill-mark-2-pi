@@ -30,6 +30,7 @@ from mycroft.util import play_wav
 from mycroft import intent_file_handler
 
 from PIL import Image, ImageDraw, ImageFont
+from pixel_ring import pixel_ring
 import struct
 
 # Basic drawing to the framebuffer
@@ -110,6 +111,16 @@ class Mark2(MycroftSkill):
         self.loading = True
         self.showing = False
         self.last_text = time.monotonic()
+        self.skip_list = ('Mark2', 'TimeSkill.update_display')
+
+        # LEDs
+        pixel_ring.set_vad_led(False)  # No red center LED speech indication
+        self.main_blue = 0x22A7F0
+        self.tertiary_blue = 0x4DE0FF
+        self.tertiary_green = 0x40DBB0
+        self.num_leds = 12
+        self.show_volume = False
+        self.speaking = False
 
     def initialize(self):
         """ Perform initalization.
@@ -134,11 +145,13 @@ class Mark2(MycroftSkill):
             # Handle the 'busy' visual
             self.bus.on('mycroft.skill.handler.start',
                         self.on_handler_started)
+            self.bus.on('mycroft.skill.handler.complete',
+                        self.on_handler_complete)
 
-            self.bus.on('enclosure.mouth.reset',
-                        self.on_handler_mouth_reset)
+            self.bus.on('recognizer_loop:audio_output_start',
+                        self.on_handler_audio_start)
             self.bus.on('recognizer_loop:audio_output_end',
-                        self.on_handler_mouth_reset)
+                        self.on_handler_audio_end)
 
             self.bus.on('mycroft.ready', self.reset_face)
 
@@ -207,11 +220,13 @@ class Mark2(MycroftSkill):
         self.volume = vol
         self.muted = False
         self.set_hardware_volume(vol)
+        self.show_volume = True
 
     def on_volume_get(self, message):
         """ Handle request for current volume. """
         self.bus.emit(message.response(data={'percent': self.volume,
                                              'muted': self.muted}))
+        self.show_volume = message.data.get('show', False)
 
     def on_volume_duck(self, message):
         """ Handle ducking event by setting the output to 0. """
@@ -268,44 +283,63 @@ class Mark2(MycroftSkill):
         # Gotta clean up manually since not using add_event()
         self.bus.remove('mycroft.skill.handler.start',
                         self.on_handler_started)
-        self.bus.remove('enclosure.mouth.reset',
-                        self.on_handler_mouth_reset)
+        self.bus.remove('mycroft.skill.handler.complete',
+                        self.on_handler_complete)
+        self.bus.remove('recognizer_loop:audio_output_start',
+                        self.on_handler_audio_start)
         self.bus.remove('recognizer_loop:audio_output_end',
-                        self.on_handler_mouth_reset)
+                        self.on_handler_audio_end)
+
+    def on_handler_audio_start(self, message):
+        """Light up LED when speaking, show volume if requested"""
+        if self.show_volume:
+            pixel_ring.set_volume(int(self.volume * self.num_leds))
+        else:
+            self.speaking = True
+            pixel_ring.set_color_palette(self.main_blue, self.tertiary_blue)
+            pixel_ring.speak()
+
+    def on_handler_audio_end(self, message):
+        self.speaking = False
+        self.showing_volume = False
+        pixel_ring.off()
 
     def on_handler_started(self, message):
-        handler = message.data.get("handler", "")
-        # Ignoring handlers from this skill and from the background clock
-        if 'Mark2' in handler:
+        """When a skill begins executing turn on the LED ring"""
+        handler = message.data.get('handler', '')
+        if self._skip_handler(handler):
             return
-        if 'TimeSkill.update_display' in handler:
-            return
-
-    def on_handler_mouth_reset(self, message):
-        """ Restore viseme to a smile. """
-        pass
+        pixel_ring.set_color_palette(self.main_blue, self.tertiary_green)
+        pixel_ring.think()
 
     def on_handler_complete(self, message):
-        """ When a skill finishes executing clear the showing page state. """
+        """When a skill finishes executing turn off the LED ring"""
         handler = message.data.get('handler', '')
-        # Ignoring handlers from this skill and from the background clock
-        # TODO: implement Something here
+        if self._skip_handler(handler):
+            return
+
+        # If speaking has already begun, on_handler_audio_end will
+        # turn off the LEDs
+        if not self.speaking and not self.show_volume:
+            pixel_ring.off()
+
+    def _skip_handler(self, handler):
+        """Ignoring handlers from this skill and from the background clock"""
+        return any(skip in handler for skip in self.skip_list)
+
 
     def handle_listener_started(self, message):
-        """ Shows listener page after wakeword is triggered.
-
-            Starts countdown to show the idle page.
-        """
-        # TODO: implement Something here
-        pass
+        """Light up LED when listening"""
+        pixel_ring.set_color_palette(self.main_blue, self.main_blue)
+        pixel_ring.listen()
 
     def handle_listener_ended(self, message):
-        """ When listening has ended show the thinking animation. """
-        pass
+        pixel_ring.off()
 
     def handle_failed_stt(self, message):
         """ No discernable words were transcribed. Show idle screen again. """
         pass
+
 
     #####################################################################
     # Manage network connction feedback
@@ -520,3 +554,4 @@ class Mark2(MycroftSkill):
 
 def create_skill():
     return Mark2()
+
