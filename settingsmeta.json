@@ -10,7 +10,7 @@
                         "type": "checkbox",
                         "name": "use_listening_beep",
                         "label": "Play beep when listening",
-                        "value": "true"
+                        "value": "false"
                     }
                 ]
             }
