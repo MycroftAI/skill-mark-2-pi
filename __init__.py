@@ -37,7 +37,7 @@ import struct
 Color = namedtuple('Color', ['red', 'green', 'blue'])
 Screen = namedtuple('Screen', ['height', 'width'])
 
-SCREEN = Screen(800, 400)
+SCREEN = Screen(800, 480)
 BACKGROUND = Color(34, 167, 240)
 
 FONT_PATH = 'NotoSansDisplay-Bold.ttf'
@@ -47,7 +47,7 @@ def fit_font(text, font_path, font_size):
     """ Brute force a good fontsize to make text fit screen. """
     font = ImageFont.truetype(font_path, font_size)
     w, h = font.getsize(text)
-    while w < 0.9 * 400:
+    while w < 0.9 * SCREEN.width:
         # iterate until the text size is just larger than the criteria
         font_size += 1
         font = ImageFont.truetype(font_path, font_size)
@@ -109,7 +109,6 @@ class Mark2(MycroftSkill):
 
         # Screen handling
         self.loading = True
-        self.showing = False
         self.last_text = time.monotonic()
         self.skip_list = ('Mark2', 'TimeSkill.update_display')
 
@@ -131,8 +130,20 @@ class Mark2(MycroftSkill):
 
 
         try:
+            # Handle Wi-Fi Setup and Pairing Visuals
+            self.add_event('system.wifi.ap_up',
+                            self.handle_ap_up)
+            self.add_event('system.wifi.ap_device_connected',
+                           self.handle_wifi_device_connected)
+            self.add_event('system.wifi.ap_device_disconnected',
+                            self.handle_ap_up)
             self.add_event('mycroft.internet.connected',
                            self.handle_internet_connected)
+            self.add_event('mycroft.paired',
+                           self.handle_paired)
+
+            # Handle Device Ready
+            self.bus.on('mycroft.ready', self.reset_face)
 
             # Handle the 'waking' visual
             self.add_event('recognizer_loop:record_begin',
@@ -148,17 +159,15 @@ class Mark2(MycroftSkill):
             self.bus.on('mycroft.skill.handler.complete',
                         self.on_handler_complete)
 
+            # Handle the 'speaking' visual
             self.bus.on('recognizer_loop:audio_output_start',
                         self.on_handler_audio_start)
             self.bus.on('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
 
-            self.bus.on('mycroft.ready', self.reset_face)
-
             # System events
             self.add_event('system.reboot', self.handle_system_reboot)
             self.add_event('system.shutdown', self.handle_system_shutdown)
-            self.add_event('enclosure.mouth.text', self.handle_show_text)
 
             # Handle volume setting via I2C
             self.add_event('mycroft.volume.set', self.on_volume_set)
@@ -186,28 +195,18 @@ class Mark2(MycroftSkill):
         subprocess.call(['/usr/bin/systemctl', 'poweroff'])
 
     def handle_show_text(self, message):
-        draw_time = time.monotonic()
-        self.last_text = draw_time
-
         self.log.debug("Drawing text to framebuffer")
-        self.showing = True
         text = message.data.get('text')
         if text:
             text = text.strip()
             font = fit_font(text, self.find_resource(FONT_PATH, 'ui'), 30)
             w, h = font.getsize(text)
-            image = Image.new('RGBA', (400, h), BACKGROUND)
+            image = Image.new('RGBA', (SCREEN.width, h), BACKGROUND)
             draw = ImageDraw.Draw(image)
             # Draw to center of screen
-            draw.text(((400 - w) / 2, 0), text,
+            draw.text(((SCREEN.width - w) / 2, 0), text,
                       fill='white', font=font)
             write_fb(image)
-            time.sleep(30)
-            # Make sure no never text has been drawn during our sleep
-            if self.last_text == draw_time:
-                rest_screen = 'loading.fb' if self.loading else 'mycroft.fb'
-                draw_file(self.find_resource(rest_screen, 'ui'))
-        self.showing = False
 
     ###################################################################
     # System volume
@@ -276,7 +275,6 @@ class Mark2(MycroftSkill):
         self.loading = False
         if is_paired():
             play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
-        if not self.showing:
             draw_file(self.find_resource('mycroft.fb', 'ui'))
 
     def shutdown(self):
@@ -289,6 +287,22 @@ class Mark2(MycroftSkill):
                         self.on_handler_audio_start)
         self.bus.remove('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
+
+    def handle_ap_up(self, message):
+        draw_file(self.find_resource('0-wifi-connect.fb', 'ui'))
+
+    def handle_wifi_device_connected(self, message):
+        draw_file(self.find_resource('1-wifi-follow-prompt.fb', 'ui'))
+        time.sleep(8)
+        draw_file(self.find_resource('2-wifi-choose-network.fb', 'ui'))
+
+    def handle_paired(self, message):
+        draw_file(self.find_resource('5-pairing-success.fb', 'ui'))
+        time.sleep(5)
+        draw_file(self.find_resource('6-intro.fb', 'ui'))
+        time.sleep(15)
+        draw_file(self.find_resource('mycroft.fb', 'ui'))
+        self.bus.remove('enclosure.mouth.text', self.handle_show_text)
 
     def on_handler_audio_start(self, message):
         """Light up LED when speaking, show volume if requested"""
@@ -346,7 +360,16 @@ class Mark2(MycroftSkill):
 
     def handle_internet_connected(self, message):
         """ System came online later after booting. """
-        self.enclosure.mouth_reset()
+        if is_paired():
+            self.enclosure.mouth_reset()
+        else:
+            # If we are not paired the pairing process will begin.
+            # Cannot handle from mycroft.not.paired event because
+            # we trigger first pairing with an utterance.
+            draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
+            time.sleep(5)
+            draw_file(self.find_resource('4-pairing-home.fb', 'ui'))
+            self.bus.on('enclosure.mouth.text', self.handle_show_text)
 
     #####################################################################
     # Web settings
