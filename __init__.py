@@ -182,10 +182,6 @@ class Mark2(MycroftSkill):
             self.bus.on('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
 
-            # System events
-            self.add_event('system.reboot', self.handle_system_reboot)
-            self.add_event('system.shutdown', self.handle_system_shutdown)
-
             # Handle volume setting via I2C
             self.add_event('mycroft.volume.set', self.on_volume_set)
             self.add_event('mycroft.volume.get', self.on_volume_get)
@@ -202,15 +198,6 @@ class Mark2(MycroftSkill):
 
     ###################################################################
     # System events
-    # TODO Check if these are needed or if the mycroft-admin-service handles
-    # these
-    def handle_system_reboot(self, message):
-        self.speak_dialog('rebooting', wait=True)
-        subprocess.call(['/usr/bin/systemctl', 'reboot'])
-
-    def handle_system_shutdown(self, message):
-        subprocess.call(['/usr/bin/systemctl', 'poweroff'])
-
     def handle_show_text(self, message):
         self.log.debug("Drawing text to framebuffer")
         text = message.data.get('text')
