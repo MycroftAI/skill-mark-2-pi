@@ -91,6 +91,23 @@ def draw_file(file_path, dev='/dev/fb0'):
             fb.write(img.read())
 
 
+# Definitions used when sending volume over i2c
+VOL_MAX = 30
+VOL_OFFSET = 15
+VOL_SMAX = VOL_MAX - VOL_OFFSET
+VOL_ZERO = 0
+
+
+def clip(val, minimum, maximum):
+    """ Clips / limits a value to a specific range.
+
+        Arguments:
+            val: value to be limited
+            minimum: minimum allowed value
+            maximum: maximum allowed value
+    """
+    return min(max(val, minimum), maximum)
+
 class Mark2(MycroftSkill):
     """
         The Mark2 skill handles much of the screen and audio activities
@@ -214,8 +231,8 @@ class Mark2(MycroftSkill):
     def on_volume_set(self, message):
         """ Force vol between 0.0 and 1.0. """
         vol = message.data.get("percent", 0.5)
-        vol = 0.0 if vol < 0.0 else vol
-        vol = 1.0 if vol > 1.0 else vol
+        vol = clip(vol, 0.0, 1.0)
+
         self.volume = vol
         self.muted = False
         self.set_hardware_volume(vol)
@@ -240,29 +257,35 @@ class Mark2(MycroftSkill):
     def set_hardware_volume(self, pct):
         """ Set the volume on hardware (which supports levels 0-63).
 
+            Since the amplifier is quite powerful the range is limited to
+            0 - 30.
+
             Arguments:
-                pct (int): audio volume (0.0 - 1.0).
+                pct (float): audio volume (0.0 - 1.0).
         """
-        self.log.debug('Setting hardware volume to: {}'.format(pct))
+        vol = int(VOL_SMAX * pct + VOL_OFFSET) if pct >= 0.01 else VOL_ZERO
+        self.log.debug('Setting hardware volume to: {} ({})'.format(pct, vol))
         try:
             subprocess.call(['/usr/sbin/i2cset',
-                             '-y',                 # force a write
-                             '1',                  # i2c bus number
-                             '0x4b',               # stereo amp device address
-                             str(int(15 * pct) + 15)])  # volume level, 0-63
+                             '-y',                # force a write
+                             '1',                 # i2c bus number
+                             '0x4b',              # stereo amp device address
+                             str(vol)])           # volume level, 0-30
         except Exception as e:
             self.log.error('Couldn\'t set volume. ({})'.format(e))
 
     def get_hardware_volume(self):
-        # Get the volume from hardware
+        """ Get the volume from hardware
+
+            Returns: (float) 0.0 - 1.0 "percentage"
+        """
         try:
             vol = subprocess.check_output(['/usr/sbin/i2cget', '-y',
                                            '1', '0x4b'])
             # Convert the returned hex value from i2cget
-            i = int(vol, 16)
-            i = 0 if i < 0 else i
-            i = 63 if i > 63 else i
-            self.volume = i / 63.0
+            hw_vol = int(vol, 16)
+            hw_vol = clip(hw_vol, 0, 63)
+            self.volume = clip((hw_vol - VOL_OFFSET) / VOL_SMAX, 0.0, 1.0)
         except subprocess.CalledProcessError as e:
             self.log.info('I2C Communication error:  {}'.format(repr(e)))
         except FileNotFoundError:
