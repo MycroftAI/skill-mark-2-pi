@@ -312,7 +312,8 @@ class Mark2(MycroftSkill):
         draw_file(self.find_resource('6-intro.fb', 'ui'))
         time.sleep(15)
         draw_file(self.find_resource('mycroft.fb', 'ui'))
-        self.bus.remove('enclosure.mouth.text', self.handle_show_text)
+        if not is_paired(): 
+            self.bus.remove('enclosure.mouth.text', self.handle_show_text)
 
     def on_handler_audio_start(self, message):
         """Light up LED when speaking, show volume if requested"""
