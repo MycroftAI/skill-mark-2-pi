@@ -234,14 +234,22 @@ class Mark2(MycroftSkill):
     def on_volume_duck(self, message):
         """ Handle ducking event by setting the output to 0. """
         self.muted = True
-        call(['pacmd', 'set-sink-volume', '0', '0'])
+        self.mute_pulseaudio()
         self.set_hardware_volume(0)
 
     def on_volume_unduck(self, message):
         """ Handle ducking event by setting the output to previous value. """
         self.muted = False
-        call(['pacmd', 'set-sink-volume', '0', '65536'])
+        self.unmute_pulseaudio()
         self.set_hardware_volume(self.volume)
+
+    def mute_pulseaudio(self):
+        """Mutes pulseaudio volume"""
+        call(['pacmd', 'set-sink-volume', '0', '0'])
+
+    def unmute_pulseaudio(self):
+        """Resets pulseaudio volume to max"""
+        call(['pacmd', 'set-sink-volume', '0', '65536'])
 
     def set_hardware_volume(self, pct):
         """ Set the volume on hardware (which supports levels 0-63).
@@ -269,8 +277,7 @@ class Mark2(MycroftSkill):
             Returns: (float) 0.0 - 1.0 "percentage"
         """
         try:
-            vol = check_output(['/usr/sbin/i2cget', '-y',
-                                           '1', '0x4b'])
+            vol = check_output(['/usr/sbin/i2cget', '-y', '1', '0x4b'])
             # Convert the returned hex value from i2cget
             hw_vol = int(vol, 16)
             hw_vol = clip(hw_vol, 0, 63)
