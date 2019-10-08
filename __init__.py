@@ -245,11 +245,11 @@ class Mark2(MycroftSkill):
 
     def mute_pulseaudio(self):
         """Mutes pulseaudio volume"""
-        call(['pacmd', 'set-sink-volume', '0', '0'])
+        call(['pacmd', 'set-sink-mute', '0', 'true'])
 
     def unmute_pulseaudio(self):
         """Resets pulseaudio volume to max"""
-        call(['pacmd', 'set-sink-volume', '0', '65536'])
+        call(['pacmd', 'set-sink-mute', '0', 'false'])
 
     def set_hardware_volume(self, pct):
         """ Set the volume on hardware (which supports levels 0-63).
