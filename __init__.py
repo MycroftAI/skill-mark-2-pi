@@ -15,7 +15,7 @@
 import astral
 import time
 import arrow
-import subprocess
+from subprocess import call, CalledProcessError
 from pytz import timezone
 from datetime import datetime
 from collections import namedtuple
@@ -234,12 +234,22 @@ class Mark2(MycroftSkill):
     def on_volume_duck(self, message):
         """ Handle ducking event by setting the output to 0. """
         self.muted = True
+        self.mute_pulseaudio()
         self.set_hardware_volume(0)
 
     def on_volume_unduck(self, message):
         """ Handle ducking event by setting the output to previous value. """
         self.muted = False
+        self.unmute_pulseaudio()
         self.set_hardware_volume(self.volume)
+
+    def mute_pulseaudio(self):
+        """Mutes pulseaudio volume"""
+        call(['pacmd', 'set-sink-mute', '0', 'true'])
+
+    def unmute_pulseaudio(self):
+        """Resets pulseaudio volume to max"""
+        call(['pacmd', 'set-sink-mute', '0', 'false'])
 
     def set_hardware_volume(self, pct):
         """ Set the volume on hardware (which supports levels 0-63).
@@ -253,11 +263,11 @@ class Mark2(MycroftSkill):
         vol = int(VOL_SMAX * pct + VOL_OFFSET) if pct >= 0.01 else VOL_ZERO
         self.log.debug('Setting hardware volume to: {} ({})'.format(pct, vol))
         try:
-            subprocess.call(['/usr/sbin/i2cset',
-                             '-y',                # force a write
-                             '1',                 # i2c bus number
-                             '0x4b',              # stereo amp device address
-                             str(vol)])           # volume level, 0-30
+            call(['/usr/sbin/i2cset',
+                  '-y',                # force a write
+                  '1',                 # i2c bus number
+                  '0x4b',              # stereo amp device address
+                  str(vol)])           # volume level, 0-30
         except Exception as e:
             self.log.error('Couldn\'t set volume. ({})'.format(e))
 
@@ -267,13 +277,12 @@ class Mark2(MycroftSkill):
             Returns: (float) 0.0 - 1.0 "percentage"
         """
         try:
-            vol = subprocess.check_output(['/usr/sbin/i2cget', '-y',
-                                           '1', '0x4b'])
+            vol = check_output(['/usr/sbin/i2cget', '-y', '1', '0x4b'])
             # Convert the returned hex value from i2cget
             hw_vol = int(vol, 16)
             hw_vol = clip(hw_vol, 0, 63)
             self.volume = clip((hw_vol - VOL_OFFSET) / VOL_SMAX, 0.0, 1.0)
-        except subprocess.CalledProcessError as e:
+        except CalledProcessError as e:
             self.log.info('I2C Communication error:  {}'.format(repr(e)))
         except FileNotFoundError:
             self.log.info('i2cget couldn\'t be found')
@@ -312,7 +321,7 @@ class Mark2(MycroftSkill):
         draw_file(self.find_resource('6-intro.fb', 'ui'))
         time.sleep(15)
         draw_file(self.find_resource('mycroft.fb', 'ui'))
-        if not is_paired(): 
+        if not is_paired():
             self.bus.remove('enclosure.mouth.text', self.handle_show_text)
 
     def on_handler_audio_start(self, message):
