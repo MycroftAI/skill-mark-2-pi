@@ -15,7 +15,7 @@
 import astral
 import time
 import arrow
-from subprocess import call, CalledProcessError
+from subprocess import call, check_output, CalledProcessError
 from pytz import timezone
 from datetime import datetime
 from collections import namedtuple
