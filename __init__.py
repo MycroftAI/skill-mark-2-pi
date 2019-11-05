@@ -118,6 +118,7 @@ class Mark2(MycroftSkill):
 
         self.settings['auto_brightness'] = False
         self.settings['use_listening_beep'] = False
+        self.wifi_setup_executed = False
 
         # System volume
         self.volume = 0.5
@@ -148,8 +149,8 @@ class Mark2(MycroftSkill):
 
         try:
             # Handle Wi-Fi Setup and Pairing Visuals
-            self.add_event('system.wifi.ap_up',
-                            self.handle_ap_up)
+            self.add_event('system.wifi.setup', self.handle_wifi_setup)
+            self.add_event('system.wifi.ap_up', self.handle_ap_up)
             self.add_event('system.wifi.ap_device_connected',
                            self.handle_wifi_device_connected)
             self.add_event('system.wifi.ap_device_disconnected',
@@ -289,10 +290,11 @@ class Mark2(MycroftSkill):
         except Exception:
             self.log.info('UNEXPECTED VOLUME RESULT:  {}'.format(vol))
 
-    def reset_face(self, message):
+    def reset_face(self, _):
         """Triggered after skills are initialized."""
         self.loading = False
         if is_paired():
+            self.gui.display_screen(name='splash')
             play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
             draw_file(self.find_resource('mycroft.fb', 'ui'))
 
@@ -307,13 +309,20 @@ class Mark2(MycroftSkill):
         self.bus.remove('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
 
-    def handle_ap_up(self, message):
-        draw_file(self.find_resource('0-wifi-connect.fb', 'ui'))
+    def handle_wifi_setup(self):
+        self.log.info('*** in mark 2 skill wifi setup handler ***')
+        self.wifi_setup_executed = True
+
+    def handle_ap_up(self, _):
+        # draw_file(self.find_resource('0-wifi-connect.fb', 'ui'))
+        self.gui.display_screen(name='access_point')
 
     def handle_wifi_device_connected(self, message):
-        draw_file(self.find_resource('1-wifi-follow-prompt.fb', 'ui'))
+        # draw_file(self.find_resource('1-wifi-follow-prompt.fb', 'ui'))
+        self.gui.display_screen(name='wifi_start')
         time.sleep(8)
-        draw_file(self.find_resource('2-wifi-choose-network.fb', 'ui'))
+        # draw_file(self.find_resource('2-wifi-choose-network.fb', 'ui'))
+        self.gui.display_screen(name='wifi_login')
 
     def handle_paired(self, message):
         draw_file(self.find_resource('5-pairing-success.fb', 'ui'))
@@ -374,20 +383,26 @@ class Mark2(MycroftSkill):
         """ No discernable words were transcribed. Show idle screen again. """
         pass
 
-
     #####################################################################
     # Manage network connction feedback
 
-    def handle_internet_connected(self, message):
+    def handle_internet_connected(self, _):
         """ System came online later after booting. """
+        self.log.info('*** in internet connected ***')
         if is_paired():
+            self.log.info('*** in is paired ***')
+            if self.wifi_setup_executed:
+                self.log.info('*** showing wifi connected screen ***')
+                self.gui.display_screen(name='wifi_connected')
+
             self.enclosure.mouth_reset()
         else:
             # If we are not paired the pairing process will begin.
             # Cannot handle from mycroft.not.paired event because
             # we trigger first pairing with an utterance.
-            draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
-            time.sleep(5)
+            # draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
+            # self.gui.display_screen(name='wifi_connected')
+            # time.sleep(5)
             draw_file(self.find_resource('4-pairing-home.fb', 'ui'))
             self.bus.on('enclosure.mouth.text', self.handle_show_text)
 
