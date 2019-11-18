@@ -294,7 +294,6 @@ class Mark2(MycroftSkill):
         """Triggered after skills are initialized."""
         self.loading = False
         if is_paired():
-            self.gui.display_screen(name='splash')
             play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
             draw_file(self.find_resource('mycroft.fb', 'ui'))
 
@@ -314,26 +313,18 @@ class Mark2(MycroftSkill):
         self.wifi_setup_executed = True
 
     def handle_ap_up(self, _):
-        # draw_file(self.find_resource('0-wifi-connect.fb', 'ui'))
         self.gui.display_screen(name='access_point')
 
-    def handle_wifi_device_connected(self, message):
-        # draw_file(self.find_resource('1-wifi-follow-prompt.fb', 'ui'))
+    def handle_wifi_device_connected(self, _):
         self.gui.display_screen(name='wifi_start')
         time.sleep(8)
-        # draw_file(self.find_resource('2-wifi-choose-network.fb', 'ui'))
         self.gui.display_screen(name='wifi_login')
 
-    def handle_paired(self, message):
-        draw_file(self.find_resource('5-pairing-success.fb', 'ui'))
-        time.sleep(5)
-        draw_file(self.find_resource('6-intro.fb', 'ui'))
-        time.sleep(15)
-        draw_file(self.find_resource('mycroft.fb', 'ui'))
+    def handle_paired(self, _):
         if not is_paired():
             self.bus.remove('enclosure.mouth.text', self.handle_show_text)
 
-    def on_handler_audio_start(self, message):
+    def on_handler_audio_start(self, _):
         """Light up LED when speaking, show volume if requested"""
         if self.show_volume:
             pixel_ring.set_volume(int(self.volume * self.num_leds))
@@ -342,7 +333,7 @@ class Mark2(MycroftSkill):
             pixel_ring.set_color_palette(self.main_blue, self.tertiary_blue)
             pixel_ring.speak()
 
-    def on_handler_audio_end(self, message):
+    def on_handler_audio_end(self, _):
         self.speaking = False
         self.showing_volume = False
         pixel_ring.off()
