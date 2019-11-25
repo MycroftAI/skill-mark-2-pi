@@ -148,18 +148,6 @@ class Mark2(MycroftSkill):
 
 
         try:
-            # Handle Wi-Fi Setup and Pairing Visuals
-            self.add_event('system.wifi.setup', self.handle_wifi_setup)
-            self.add_event('system.wifi.ap_up', self.handle_ap_up)
-            self.add_event('system.wifi.ap_device_connected',
-                           self.handle_wifi_device_connected)
-            self.add_event('system.wifi.ap_device_disconnected',
-                            self.handle_ap_up)
-            self.add_event('mycroft.internet.connected',
-                           self.handle_internet_connected)
-            self.add_event('mycroft.paired',
-                           self.handle_paired)
-
             # Handle Device Ready
             self.bus.on('mycroft.ready', self.reset_face)
 
@@ -308,22 +296,6 @@ class Mark2(MycroftSkill):
         self.bus.remove('recognizer_loop:audio_output_end',
                         self.on_handler_audio_end)
 
-    def handle_wifi_setup(self):
-        self.log.info('*** in mark 2 skill wifi setup handler ***')
-        self.wifi_setup_executed = True
-
-    def handle_ap_up(self, _):
-        self.gui.display_screen(name='access_point')
-
-    def handle_wifi_device_connected(self, _):
-        self.gui.display_screen(name='wifi_start')
-        time.sleep(8)
-        self.gui.display_screen(name='wifi_login')
-
-    def handle_paired(self, _):
-        if not is_paired():
-            self.bus.remove('enclosure.mouth.text', self.handle_show_text)
-
     def on_handler_audio_start(self, _):
         """Light up LED when speaking, show volume if requested"""
         if self.show_volume:
@@ -361,7 +333,6 @@ class Mark2(MycroftSkill):
         """Ignoring handlers from this skill and from the background clock"""
         return any(skip in handler for skip in self.skip_list)
 
-
     def handle_listener_started(self, message):
         """Light up LED when listening"""
         pixel_ring.set_color_palette(self.main_blue, self.main_blue)
@@ -373,29 +344,6 @@ class Mark2(MycroftSkill):
     def handle_failed_stt(self, message):
         """ No discernable words were transcribed. Show idle screen again. """
         pass
-
-    #####################################################################
-    # Manage network connction feedback
-
-    def handle_internet_connected(self, _):
-        """ System came online later after booting. """
-        self.log.info('*** in internet connected ***')
-        if is_paired():
-            self.log.info('*** in is paired ***')
-            if self.wifi_setup_executed:
-                self.log.info('*** showing wifi connected screen ***')
-                self.gui.display_screen(name='wifi_connected')
-
-            self.enclosure.mouth_reset()
-        else:
-            # If we are not paired the pairing process will begin.
-            # Cannot handle from mycroft.not.paired event because
-            # we trigger first pairing with an utterance.
-            # draw_file(self.find_resource('3-wifi-success.fb', 'ui'))
-            # self.gui.display_screen(name='wifi_connected')
-            # time.sleep(5)
-            draw_file(self.find_resource('4-pairing-home.fb', 'ui'))
-            self.bus.on('enclosure.mouth.text', self.handle_show_text)
 
     #####################################################################
     # Web settings
@@ -603,4 +551,3 @@ class Mark2(MycroftSkill):
 
 def create_skill():
     return Mark2()
-
