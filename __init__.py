@@ -30,8 +30,9 @@ from mycroft.util import play_wav
 from mycroft import intent_file_handler
 
 from PIL import Image, ImageDraw, ImageFont
-from pixel_ring import pixel_ring
 import struct
+
+from mycroft.enclosure.hardware_enclosure import HardwareEnclosure
 
 # Basic drawing to the framebuffer
 Color = namedtuple('Color', ['red', 'green', 'blue'])
@@ -41,7 +42,6 @@ SCREEN = Screen(800, 480)
 BACKGROUND = Color(34, 167, 240)
 
 FONT_PATH = 'NotoSansDisplay-Bold.ttf'
-
 
 def fit_font(text, font_path, font_size):
     """ Brute force a good fontsize to make text fit screen. """
@@ -91,85 +91,50 @@ def draw_file(file_path, dev='/dev/fb0'):
             fb.write(img.read())
 
 
-# Definitions used when sending volume over i2c
-VOL_MAX = 30
-VOL_OFFSET = 15
-VOL_SMAX = VOL_MAX - VOL_OFFSET
-VOL_ZERO = 0
-
-
-def clip(val, minimum, maximum):
-    """ Clips / limits a value to a specific range.
-
-        Arguments:
-            val: value to be limited
-            minimum: minimum allowed value
-            maximum: maximum allowed value
-    """
-    return min(max(val, minimum), maximum)
-
 class Mark2(MycroftSkill):
     """
         The Mark2 skill handles much of the screen and audio activities
         related to Mycroft's core functionality.
     """
     def __init__(self):
-        super().__init__('Mark2')
+        self.enclosure_type = "Mark2"
+        super().__init__(self.enclosure_type)
 
         self.settings['auto_brightness'] = False
-        self.settings['use_listening_beep'] = False
+        self.settings['use_listening_beep'] = True
         self.wifi_setup_executed = False
 
-        # System volume
-        self.volume = 0.5
         self.muted = False
-        self.get_hardware_volume()       # read from the device
+        self.show_init = True
 
         # Screen handling
         self.loading = True
         self.last_text = time.monotonic()
-        self.skip_list = ('Mark2', 'TimeSkill.update_display')
+        self.skip_list = (self.enclosure_type, 'TimeSkill.update_display')
 
-        # LEDs
-        pixel_ring.set_vad_led(False)  # No red center LED speech indication
-        self.main_blue = 0x22A7F0
-        self.tertiary_blue = 0x4DE0FF
-        self.tertiary_green = 0x40DBB0
-        self.num_leds = 12
         self.show_volume = False
-        self.speaking = False
+        self.saved_volume = 0.5
+
+        self.m2enc = HardwareEnclosure(self.enclosure_type)
+        # test - remove !
+        import os
+        os.system("aplay -Dplughw:Adaptive /home/pi/mycroft-core/mycroft/res/snd/start_listening.wav")
+
 
     def initialize(self):
         """ Perform initalization.
-
             Registers messagebus handlers.
         """
-        self.brightness_dict = self.translate_namedvalues('brightness.levels')
+        self.log.info("*** Kivy Mark2 skill initialize() ***")
 
+        self.brightness_dict = self.translate_namedvalues('brightness.levels')
 
         try:
             # Handle Device Ready
             self.bus.on('mycroft.ready', self.reset_face)
 
-            # Handle the 'waking' visual
-            self.add_event('recognizer_loop:record_begin',
-                           self.handle_listener_started)
-            self.add_event('recognizer_loop:record_end',
-                           self.handle_listener_ended)
             self.add_event('mycroft.speech.recognition.unknown',
                            self.handle_failed_stt)
-
-            # Handle the 'busy' visual
-            self.bus.on('mycroft.skill.handler.start',
-                        self.on_handler_started)
-            self.bus.on('mycroft.skill.handler.complete',
-                        self.on_handler_complete)
-
-            # Handle the 'speaking' visual
-            self.bus.on('recognizer_loop:audio_output_start',
-                        self.on_handler_audio_start)
-            self.bus.on('recognizer_loop:audio_output_end',
-                        self.on_handler_audio_end)
 
             # Handle volume setting via I2C
             self.add_event('mycroft.volume.set', self.on_volume_set)
@@ -183,7 +148,8 @@ class Mark2(MycroftSkill):
         # Update use of wake-up beep
         self._sync_wake_beep_setting()
 
-        self.settings.set_changed_callback(self.on_websettings_changed)
+        self.settings_change_callback = self.on_websettings_changed
+
 
     ###################################################################
     # System events
@@ -209,14 +175,16 @@ class Mark2(MycroftSkill):
         vol = message.data.get("percent", 0.5)
         vol = clip(vol, 0.0, 1.0)
 
-        self.volume = vol
         self.muted = False
-        self.set_hardware_volume(vol)
+        self.saved_volume = vol
+        self.m2enc.hardware_volume.set_hw_volume(vol)
         self.show_volume = True
+        self.log.info("*** SET VOLUME TO %s ***" % (vol,))
 
     def on_volume_get(self, message):
         """ Handle request for current volume. """
-        self.bus.emit(message.response(data={'percent': self.volume,
+        self.log.info("*** GET VOLUME %s ***" % (self.m2enc.hardware_volume.get_hw_volume(),))
+        self.bus.emit(message.response(data={'percent': self.m2enc.hardware_volume.get_hw_volume(),
                                              'muted': self.muted}))
         self.show_volume = message.data.get('show', False)
 
@@ -224,13 +192,14 @@ class Mark2(MycroftSkill):
         """ Handle ducking event by setting the output to 0. """
         self.muted = True
         self.mute_pulseaudio()
-        self.set_hardware_volume(0)
+        self.saved_volume = self.m2enc.hardware_volume.get_hw_volume()
+        self.m2enc.hardware_volume.set_hw_volume(0.0)
 
     def on_volume_unduck(self, message):
         """ Handle ducking event by setting the output to previous value. """
         self.muted = False
         self.unmute_pulseaudio()
-        self.set_hardware_volume(self.volume)
+        self.m2enc.hardware_volume.set_hw_volume(self.saved_volume)
 
     def mute_pulseaudio(self):
         """Mutes pulseaudio volume"""
@@ -240,106 +209,17 @@ class Mark2(MycroftSkill):
         """Resets pulseaudio volume to max"""
         call(['pacmd', 'set-sink-mute', '0', 'false'])
 
-    def set_hardware_volume(self, pct):
-        """ Set the volume on hardware (which supports levels 0-63).
-
-            Since the amplifier is quite powerful the range is limited to
-            0 - 30.
-
-            Arguments:
-                pct (float): audio volume (0.0 - 1.0).
-        """
-        vol = int(VOL_SMAX * pct + VOL_OFFSET) if pct >= 0.01 else VOL_ZERO
-        self.log.debug('Setting hardware volume to: {} ({})'.format(pct, vol))
-        try:
-            call(['/usr/sbin/i2cset',
-                  '-y',                # force a write
-                  '1',                 # i2c bus number
-                  '0x4b',              # stereo amp device address
-                  str(vol)])           # volume level, 0-30
-        except Exception as e:
-            self.log.error('Couldn\'t set volume. ({})'.format(e))
-
-    def get_hardware_volume(self):
-        """ Get the volume from hardware
-
-            Returns: (float) 0.0 - 1.0 "percentage"
-        """
-        try:
-            vol = check_output(['/usr/sbin/i2cget', '-y', '1', '0x4b'])
-            # Convert the returned hex value from i2cget
-            hw_vol = int(vol, 16)
-            hw_vol = clip(hw_vol, 0, 63)
-            self.volume = clip((hw_vol - VOL_OFFSET) / VOL_SMAX, 0.0, 1.0)
-        except CalledProcessError as e:
-            self.log.info('I2C Communication error:  {}'.format(repr(e)))
-        except FileNotFoundError:
-            self.log.info('i2cget couldn\'t be found')
-        except Exception:
-            self.log.info('UNEXPECTED VOLUME RESULT:  {}'.format(vol))
-
     def reset_face(self, _):
         """Triggered after skills are initialized."""
         self.loading = False
         if is_paired():
-            play_wav(join(self.root_dir, 'ui', 'bootup.wav'))
             draw_file(self.find_resource('mycroft.fb', 'ui'))
 
     def shutdown(self):
         # Gotta clean up manually since not using add_event()
-        self.bus.remove('mycroft.skill.handler.start',
-                        self.on_handler_started)
-        self.bus.remove('mycroft.skill.handler.complete',
-                        self.on_handler_complete)
-        self.bus.remove('recognizer_loop:audio_output_start',
-                        self.on_handler_audio_start)
-        self.bus.remove('recognizer_loop:audio_output_end',
-                        self.on_handler_audio_end)
-
-    def on_handler_audio_start(self, _):
-        """Light up LED when speaking, show volume if requested"""
-        if self.show_volume:
-            pixel_ring.set_volume(int(self.volume * self.num_leds))
-        else:
-            self.speaking = True
-            pixel_ring.set_color_palette(self.main_blue, self.tertiary_blue)
-            pixel_ring.speak()
-
-    def on_handler_audio_end(self, _):
-        self.speaking = False
-        self.showing_volume = False
-        pixel_ring.off()
-
-    def on_handler_started(self, message):
-        """When a skill begins executing turn on the LED ring"""
-        handler = message.data.get('handler', '')
-        if self._skip_handler(handler):
-            return
-        pixel_ring.set_color_palette(self.main_blue, self.tertiary_green)
-        pixel_ring.think()
-
-    def on_handler_complete(self, message):
-        """When a skill finishes executing turn off the LED ring"""
-        handler = message.data.get('handler', '')
-        if self._skip_handler(handler):
-            return
-
-        # If speaking has already begun, on_handler_audio_end will
-        # turn off the LEDs
-        if not self.speaking and not self.show_volume:
-            pixel_ring.off()
-
-    def _skip_handler(self, handler):
-        """Ignoring handlers from this skill and from the background clock"""
-        return any(skip in handler for skip in self.skip_list)
-
-    def handle_listener_started(self, message):
-        """Light up LED when listening"""
-        pixel_ring.set_color_palette(self.main_blue, self.main_blue)
-        pixel_ring.listen()
-
-    def handle_listener_ended(self, message):
-        pixel_ring.off()
+        self.log.info("Mark2 enclosure shutting down")
+        self.m2enc.terminate()
+        self.log.info("Mark2 enclosure shut down complete")
 
     def handle_failed_stt(self, message):
         """ No discernable words were transcribed. Show idle screen again. """
