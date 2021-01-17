@@ -1,5 +1,5 @@
 # <img src='https://raw.githack.com/FortAwesome/Font-Awesome/master/svgs/solid/cog.svg' card_color='#40DBB0' width='50' height='50' style='vertical-align:bottom'/> ARCHIVE - This Skill is no longer in use.
-Customize your Mark 2
+Please use the new [Mark II Skill](https://github.com/MycroftAI/skill-mark-2)
 
 ## About
 The Mycroft Mark 2 has several unique capabilities which this Skill lets you
